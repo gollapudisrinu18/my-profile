@@ -1,4 +1,9 @@
-name: Deploy portfolio to GitHub Pages
+name: Redirect /my-profile/ to the portfolio root
+
+# The portfolio now lives at https://gollapudisrinu18.github.io/ (repository
+# gollapudisrinu18/gollapudisrinu18.github.io). This workflow keeps old links working:
+# it builds the same page list and replaces every page under /my-profile/ with a
+# redirect to the same page (and #section) at the root. Files such as the resume PDF stay.
 
 on:
   push:
@@ -24,6 +29,37 @@ jobs:
           python-version: "3.12"
       - run: pip install jinja2
       - run: python site/build_site.py
+      - name: Replace every page with a redirect to the root site
+        run: |
+          python - <<'PY'
+          import html, os
+          ROOT = "https://gollapudisrinu18.github.io/"
+          TEMPLATE = """<!doctype html>
+          <html lang="en"><head><meta charset="utf-8">
+          <title>Moved to {target}</title>
+          <link rel="canonical" href="{target}">
+          <meta name="robots" content="noindex">
+          <meta http-equiv="refresh" content="0; url={target}">
+          <script>location.replace("{target}" + location.search + location.hash);</script>
+          </head><body><p>This portfolio has moved to <a href="{target}">{target}</a>.</p></body></html>
+          """
+          n = 0
+          for d, _, files in os.walk("_site"):
+              for f in files:
+                  if not f.endswith(".html"):
+                      continue
+                  rel = os.path.relpath(os.path.join(d, f), "_site").replace(os.sep, "/")
+                  target = ROOT + ("" if rel == "index.html" else rel)
+                  if rel == "404.html":
+                      body = TEMPLATE.replace('location.replace("{target}" + location.search + location.hash);',
+                          'location.replace("' + ROOT + '" + location.pathname.replace(/^\\/my-profile\\/?/, "") + location.search + location.hash);')
+                      target = ROOT
+                  else:
+                      body = TEMPLATE
+                  open(os.path.join(d, f), "w").write(body.replace("{target}", html.escape(target)))
+                  n += 1
+          print("redirect pages:", n)
+          PY
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
